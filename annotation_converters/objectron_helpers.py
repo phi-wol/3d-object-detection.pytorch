@@ -16,6 +16,7 @@ from objectron.schema import annotation_data_pb2 as annotation_protocol
 # The annotations are stored in protocol buffer format.
 # The AR Metadata captured with each frame in the video
 
+from scipy.spatial.transform import Rotation as R
 
 def get_frame_annotation(sequence, frame_id):
     """Grab an annotated frame from the sequence."""
@@ -23,28 +24,66 @@ def get_frame_annotation(sequence, frame_id):
     object_id = 0
     object_keypoints_2d = []
     object_keypoints_3d = []
-    object_rotations = []
-    object_translations = []
-    object_scale = []
+    #object_rotations = []
+    #object_translations = []
+    #object_scale = []
     num_keypoints_per_object = []
     object_categories = []
     annotation_types = []
+    object_bboxes_3d = []
+    #visibilities = []
+
     # Get the camera for the current frame. We will use the camera to bring
     # the object from the world coordinate to the current camera coordinate.
-    camera = np.array(data.camera.transform).reshape(4, 4)
+    #camera = np.array(data.camera.transform).reshape(4, 4)
+    view_matrix = np.array(data.camera.view_matrix).reshape(4, 4)
+    intrinsics = np.array(data.camera.intrinsics).reshape(3, 3)
 
-    for obj in sequence.objects:
+    # adjustment of coordinate system conventions:
+    # - convert from objectron into mmdetection coordinate system
+    # - negate z and swap x & y in points
+    # - sawp px & py in intrinsics
+
+    intrinsics[0,2], intrinsics[1,2] = intrinsics[1,2], intrinsics[0,2]
+
+    for obj in sequence.objects: # what happens to objects not visible in the scene?
         rotation = np.array(obj.rotation).reshape(3, 3)
+
         translation = np.array(obj.translation)
-        object_scale.append(np.array(obj.scale))
+        # scale invariant
+        # object_scale.append(np.array(obj.scale))
         transformation = np.identity(4)
         transformation[:3, :3] = rotation
         transformation[:3, 3] = translation
-        obj_cam = np.matmul(camera, transformation)
-        object_translations.append(obj_cam[:3, 3])
-        object_rotations.append(obj_cam[:3, :3])
+        # transformation into objectron camera coordinates
+        obj_cam = np.matmul(view_matrix, transformation)
+
+        # convert into mmdetection coordinate system
+        # negate z and swap x & y in points
+        rot_adjustment = np.array([
+            [0, 1, 0], 
+            [1, 0, 0], 
+            [0, 0, -1]])
+        transformation_adj = np.eye(4)
+        transformation_adj[:3, :3] = rot_adjustment
+        obj_cam = np.matmul(transformation_adj, obj_cam)
+
+        # object_translations.append(obj_cam[:3, 3])
+        # object_rotations.append(obj_cam[:3, :3])
+
+        # transfer rotation matrix to euler angles
         object_categories.append(obj.category)
         annotation_types.append(obj.type)
+        # unit_points.append(obj.keypoints) # contains box vertices in the "BOX" coordinate, (i.e. it's a unit box)
+
+        # we need translation, scale & all three rotations in euler angles
+        trans = obj_cam[:3, 3].tolist() 
+        scale = list(obj.scale)
+        rot = R.from_matrix(obj_cam[:3, :3])
+        euler_angles = rot.as_euler('xyz', degrees=False).tolist()
+
+        bbox_3d = trans + scale + euler_angles
+        object_bboxes_3d.append(bbox_3d)
 
     keypoint_size_list = []
     for annotations in data.annotations:
@@ -58,8 +97,9 @@ def get_frame_annotation(sequence, frame_id):
                 (keypoint.point_3d.x, keypoint.point_3d.y, keypoint.point_3d.z))
         num_keypoints_per_object.append(num_keypoints)
         object_id += 1
+        #visibilities.append(annotations.visibility)
     return [object_keypoints_2d, object_categories, keypoint_size_list,
-            annotation_types]
+            annotation_types, object_bboxes_3d, intrinsics.tolist(), view_matrix.tolist()] #, object_keypoints_3d, visibilities]
 
 
 def get_video_frames_number(video_file):
