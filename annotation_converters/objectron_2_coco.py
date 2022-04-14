@@ -17,10 +17,12 @@ from annotation_converters.objectron_box import Box
 
 
 lists_root_path = osp.abspath(os.path.join(osp.dirname(__file__), '../3rdparty/Objectron/index'))
+lists_root_path = osp.abspath(os.path.join(osp.dirname(__file__), '../3rdparty/Objectron/index_reduced'))
+lists_root_path = osp.abspath(os.path.join(osp.dirname(__file__), '../3rdparty/Objectron/index_single'))
 # contains indices for train test splits
 
 # dummy lists with reduced file number:
-lists_root_path = osp.abspath("/Users/philipp.wolters/code/semantic_perception/objectron/index_reduced")
+#lists_root_path = osp.abspath("/Users/philipp.wolters/code/semantic_perception/objectron/index_reduced")
 # lists_root_path = osp.abspath("/Users/philipp.wolters/code/semantic_perception/objectron/index_single")
 
 #%%
@@ -118,7 +120,6 @@ def save_2_coco(output_root, subset_name, data_info, obj_classes, fps_divisor,
     class_2_id = {cl : i + 1 for i, cl in enumerate(obj_classes)}
     images_info = []
     annotations = []
-
     for item in tqdm(data_info):
         vid_path, annotation = item
         # assert get_video_frames_number(vid_path) == len(annotation)
@@ -159,7 +160,7 @@ def save_2_coco(output_root, subset_name, data_info, obj_classes, fps_divisor,
             vid_name_idx = vid_path.find('batch-')
             image_info['file_name'] = osp.join('images',
                     frame_ann[1] + '_' + vid_path[vid_name_idx : vid_path.rfind(osp.sep)].replace(osp.sep, '_') + \
-                    '_' + str(frame_idx) + '.jpg')
+                    '_' + '{:05d}'.format(frame_idx) + '.jpg')
             image_info['cam_intrinsic'] = intrinsics
             image_info['extrinsics'] = extrinsics
             images_info.append(image_info)
@@ -183,7 +184,7 @@ def save_2_coco(output_root, subset_name, data_info, obj_classes, fps_divisor,
                 tensor_3d = tensor(bboxes_3d)
                 gt_bboxes = CameraInstance3DBoxes(tensor_3d, box_dim=tensor_3d.shape[-1], origin=(0.5,0.5,0.5))
                 gt_img = draw_camera_bbox3d_on_img(
-                gt_bboxes, frames[frame_idx].copy(), image_info['cam_intrinsic'], None, color=(61, 102, 255), thickness=2)
+                gt_bboxes, frames[frame_idx].copy(), image_info['cam_intrinsic'], None, color=(61, 102, 255), thickness=1)
                 cv.imwrite(osp.join(output_root, image_info['file_name']), gt_img)
 
                 print(keypoints[0].shape)
@@ -227,7 +228,6 @@ def save_2_coco(output_root, subset_name, data_info, obj_classes, fps_divisor,
                 test_box_obj = test_box.apply_transformation(transformation_adj)
                 # print(test_box)
 
-
                 print(test_box_obj.vertices)
 
                 #print( frame_ann[7])
@@ -240,8 +240,6 @@ def save_2_coco(output_root, subset_name, data_info, obj_classes, fps_divisor,
                 print(corner_points_3d_mapped)
 
                 #print( frame_ann[8])
-
-                
 
             if dump_images and not debug:
                 frames[frame_idx] = cv.resize(frames[frame_idx], (w, h))
@@ -310,7 +308,7 @@ def main():
     for k in data_info:
         print('Converting ' + k)
         stat = save_2_coco(args.output_folder, k, data_info[k], args.obj_classes,
-                           args.fps_divisor, args.res_divisor, not args.only_annotation, ['shoe', 'bike'], debug= args.debug)
+                           args.fps_divisor, args.res_divisor, not args.only_annotation, ['shoe', 'bike', 'chair'], debug= args.debug)
         for c in stat:
             print(f'{c}: {stat[c]}')
 

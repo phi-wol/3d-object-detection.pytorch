@@ -23,7 +23,7 @@ class CameraInstance3DBoxes(BaseInstance3DBoxes):
              v
         down y
 
-    The relative coordinate of bottom center in a CAM box is (0.5, 1.0, 0.5),
+    The relative coordinate of bottom center in a CAM box is (0.5, 0.5, 0.5),
     and the yaw is around the y axis, thus the rotation axis=1.
     The yaw is 0 at the positive direction of x axis, and decreases from
     the positive direction of x to the positive direction of z.
@@ -31,7 +31,7 @@ class CameraInstance3DBoxes(BaseInstance3DBoxes):
     Attributes:
         tensor (torch.Tensor): Float matrix in shape (N, box_dim).
         box_dim (int): Integer indicating the dimension of a box
-            Each row is (x, y, z, x_size, y_size, z_size, yaw, ...).
+            Each row is (x, y, z, x_size, y_size, z_size, pitch, yaw, roll).
         with_yaw (bool): If True, the value of yaw will be set to 0 as
             axis-aligned boxes tightly enclosing the original boxes.
     """
@@ -122,6 +122,8 @@ class CameraInstance3DBoxes(BaseInstance3DBoxes):
 
         Convert the boxes to  in clockwise order, in the form of
         (x0y0z0, x0y0z1, x0y1z1, x0y1z0, x1y0z0, x1y0z1, x1y1z1, x1y1z0)
+        top face : (0,5) & (1, 6) form the x
+        front face : (0, 7) & (3, 4)
 
         .. code-block:: none
 
@@ -160,13 +162,13 @@ class CameraInstance3DBoxes(BaseInstance3DBoxes):
             #print("Angle: ", self.tensor[:, 6])
             #print("Axis: ", self.X_AXIS)
             corners = rotation_3d_in_axis(
-                corners, self.tensor[:, 6], axis=self.X_AXIS) #), clockwise=True)
+                corners, self.tensor[:, 6], axis=self.X_AXIS) #, clockwise=True)
             # yaw: y
             corners = rotation_3d_in_axis(
                 corners, self.tensor[:, 7], axis=self.YAW_AXIS)
             # roll: z
             corners = rotation_3d_in_axis(
-                corners, self.tensor[:, 8], axis=self.Z_AXIS)
+                corners, self.tensor[:, 8], axis=self.Z_AXIS) #, clockwise=True)
             # print("RotZ: ",corners)
         else:
             # only rotate around the yaw-axis
@@ -250,13 +252,27 @@ class CameraInstance3DBoxes(BaseInstance3DBoxes):
         """
         assert bev_direction in ('horizontal', 'vertical')
         if bev_direction == 'horizontal':
-            self.tensor[:, 0::7] = -self.tensor[:, 0::7]
+            self.tensor[:, 0] = -self.tensor[:, 0]
             if self.with_yaw:
-                self.tensor[:, 6] = -self.tensor[:, 6] + np.pi
+                if self.box_dim == 9:
+                    self.tensor[:, 8] = - self.tensor[:, 8]
+                    self.tensor[:, 7] = - self.tensor[:, 7] # + np.pi 
+                    # self.tensor[:, 6] = self.tensor[:, 6] 
+
+                    # self.tensor[:, 8] = - self.tensor[:, 8] #+ np.pi
+                    # self.tensor[:, 7] = - self.tensor[:, 7] + np.pi # + np.pi/2
+                    # self.tensor[:, 6] = - self.tensor[:, 6] # + np.pi/2
+
+                else:
+                    self.tensor[:, 6] = -self.tensor[:, 6] + np.pi
+
         elif bev_direction == 'vertical':
-            self.tensor[:, 2::7] = -self.tensor[:, 2::7]
+            self.tensor[:, 2] = -self.tensor[:, 2]
             if self.with_yaw:
-                self.tensor[:, 6] = -self.tensor[:, 6]
+                if self.box_dim == 9:
+                    self.tensor[:, 7] = -self.tensor[:, 7]
+                else:
+                    self.tensor[:, 6] = -self.tensor[:, 6]
 
         if points is not None:
             assert isinstance(points, (torch.Tensor, np.ndarray, BasePoints))
